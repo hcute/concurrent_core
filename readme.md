@@ -1,4 +1,4 @@
-# 线程的八大核心基础知识
+#  x线程的八大核心基础知识
 ##  创建线程的方法
 
 - 创建方式
@@ -143,7 +143,253 @@
 
 ## 停止线程的方式
 
-### 使用interrupt来通知，而不是强制停止
+**使用interrupt来通知，而不是强制停止**
+
+### 停止的方式
+
+- 通常情况下如何停止
+
+  ```java
+  package threadcoreknowledge.stopthreads;
+  
+  /**
+   * run 方法内没有sleep和wait方法下停止线程
+   */
+  public class RightWayStopThreadWithoutSleep implements Runnable{
+  
+  
+      @Override
+      public void run() {
+          int num = 0;
+          while (!Thread.currentThread().isInterrupted() && num < Integer.MAX_VALUE/2) {
+              if (num % 10000 == 0) {
+                  System.out.println(num + "是10000的倍数");
+              }
+              num++;
+          }
+          System.out.println("线程执行结束");
+      }
+  
+      public static void main(String[] args) throws InterruptedException {
+          Thread thread = new Thread(new RightWayStopThreadWithoutSleep());
+          thread.start();
+          Thread.sleep(2000);
+          thread.interrupt();
+      }
+  }
+  ```
+
+  
+
+- 线程被阻塞如何停止
+
+  ```java
+  package threadcoreknowledge.stopthreads;
+  
+  /**
+   *  带有sleep的中断线程的方法
+   */
+  public class RightWayStopThreadWithSleep{
+  
+  
+      public static void main(String[] args) throws InterruptedException {
+  
+          Runnable runnable = () ->{
+              int num = 0;
+              while (num <=300 && !Thread.currentThread().isInterrupted()) {
+                  if (num % 100 ==0) {
+                      System.out.println(num + "是100的倍数");
+                  }
+                  num++;
+              }
+  
+              try {
+                  Thread.sleep(1000); // 睡眠过程中，如果收到停止信号，则会抛出异常java.lang.InterruptedException: sleep interrupted
+              } catch (InterruptedException e) {
+                  e.printStackTrace();
+              }
+              System.out.println("任务执行结束了！");
+          };
+  
+          Thread thread = new Thread(runnable);
+          thread.start();
+          Thread.sleep(500);
+          thread.interrupt();
+  
+      }
+  }
+  
+  ```
+
+  
+
+- 每次迭代之后都阻塞如何停止
+
+  ```java
+  package threadcoreknowledge.stopthreads;
+  
+  /**
+   * 每次循环都sleep或wait等待的情况下停止线程
+   */
+  public class RightWayStopThreadWithSleepEveyLoop {
+  
+      public static void main(String[] args) throws InterruptedException {
+          Runnable runnable = ()->{
+              int num = 0;
+              try {
+                  while (num <=10000 /*&& !Thread.currentThread().isInterrupted()*/){ // 此处不需要每次都判断是否中断
+                      if (num % 100 == 0) {
+                          System.out.println(num + "是100倍数");
+                      }
+                      num++;
+                      Thread.sleep(10);
+                  }
+              } catch (InterruptedException e) {
+                  e.printStackTrace();
+              }
+          };
+        	// 如果try catch 在while 循环里面 intertupt 是没有生效的
+          /**while (num <= 10000 && !Thread.currentThread().isInterrupted()) {
+            if (num % 100 == 0) {
+              System.out.println(num + "是100的倍数");
+            }
+  
+            num++;
+            // try catch 在while的内部线程不会中断
+            try {
+            	// sleep 会清楚interrupt的标记位，如果try catch 的话当前线程的停止标志就会被清除
+              Thread.sleep(10);
+            } catch (InterruptedException e) {
+              e.printStackTrace();
+            }
+          }*/
+  
+          Thread thread = new Thread(runnable);
+          thread.start();
+          Thread.sleep(5000);
+          thread.interrupt();
+      }
+  }
+  
+  ```
+
+- 最佳实践
+
+  - 优选选择：传递中断
+
+    ```java
+    package threadcoreknowledge.stopthreads;
+    
+    /**
+     * catch住InterruptedException优选选择抛出，那么在run方法就会强制try catch
+     */
+    public class RightWayStopThreadInProd implements Runnable{
+    
+    
+        @Override
+        public void run() {
+            try {
+                while (true){
+                    System.out.println("go");
+                    throwInMethod();
+                }
+            } catch (InterruptedException e) {
+                System.out.println("保存日志");
+                e.printStackTrace();
+            }
+        }
+    
+        /**
+         * 抛出异常 不要tryCatch 如果tryCatch就达不到停止的效果
+         * @throws InterruptedException
+         */
+        private void throwInMethod() throws InterruptedException {
+            Thread.sleep(2000);
+            /*try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }*/
+        }
+    
+        public static void main(String[] args) throws InterruptedException {
+            Thread thread = new Thread(new RightWayStopThreadInProd());
+            thread.start();
+            Thread.sleep(1000);
+            thread.interrupt();
+        }
+    }
+    
+    ```
+
+    
+
+  - 不想或无法传递：**恢复中断**
+
+    ```java
+    package threadcoreknowledge.stopthreads;
+    
+    /**
+     * catch住InterruptedException后调用Thread.currentThread().interrupt()来
+     */
+    public class RightWayStopThreadInProd2 implements Runnable{
+    
+    
+        @Override
+        public void run() {
+            while (true){
+                if (Thread.currentThread().isInterrupted()){
+                    System.out.println("Interrupt 线程被中断了");
+                    break;
+                }
+                System.out.println("go");
+                reInterrupt();
+            }
+        }
+    
+        /**
+         * 如果一定要catch 那么在catch后面再继续中断线程
+         * @throws InterruptedException
+         */
+        private void reInterrupt() {
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt(); // 继续中断异常
+                e.printStackTrace();
+            }
+        }
+    
+        public static void main(String[] args) throws InterruptedException {
+            Thread thread = new Thread(new RightWayStopThreadInProd2());
+            thread.start();
+            Thread.sleep(1000);
+            thread.interrupt();
+        }
+    }
+    
+    ```
+
+    
+
+  - 不应屏蔽中断
+
+    - 如果屏蔽中断会产生信息不畅通
+
+- 响应中断的方式
+
+  - Object类的 wait()、wait(long) 、wait(long,int)
+  - Thread.sleep(long)/sleep(long,int)
+  - Thread.join()/join(long)/join(long,int)
+  - java.util.concurrent.BlockingQueue.take()/put(E)
+  - java.util.concurrent.locks.Lock.lockInterruptibly()
+  - java.util.concurrent.CountDownLatch.await()
+  - java.util.concurrent.CyclicBarrier.await()
+  - java.util.concurrent.Exchanger.exchange(V)
+  - java.nio.channels.InterruptibleChannel相关方法
+  - java.nio.channels.Selector的相关方法
+
+
 
 
 
