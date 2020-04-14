@@ -257,7 +257,7 @@
             num++;
             // try catch 在while的内部线程不会中断
             try {
-            	// sleep 会清楚interrupt的标记位，如果try catch 的话当前线程的停止标志就会被清除
+            	// sleep 会清除interrupt的标记位，如果try catch 的话当前线程的停止标志就会被清除
               Thread.sleep(10);
             } catch (InterruptedException e) {
               e.printStackTrace();
@@ -391,9 +391,115 @@
 
 
 
+### 错误停止的方法
+
+#### 第一种方式，编译器会给出提示
+
+- stop
+  - 可能导致数据错乱，但是会释放monitor锁
+- suspend
+  - 不会释放锁，带着锁挂起，可能会导致死锁
+- resume
+  - 不会释放锁，带着锁挂起，可能会导致死锁
+
+#### 第二种方式，需要注意
+
+- 用volatile 设置boolean的标记位
+
+  - 看上去可行
+
+  - 错误原因
+
+    为什么用volatile停止线程不够全面 
+
+    ​		解答：这种做法是错误的，或者说是不够全面的，在某些情况下虽然可用，但是某些情况下有严重问题。 这种方法在《Java并发编程实战》中被明确指出了缺陷，我们一起来看看缺陷在哪里： 此方法错误的原因在于，如果我们遇到了线程长时间阻塞（这是一种很常见的情况，例如生产者消费者模式中就存在这样的情况），就没办法及时唤醒它，或者永远都无法唤醒该线程，而interrupt设计之初就是把wait等长期阻塞作为一种特殊情况考虑在内了，我们应该用interrupt思维来停止线程。
+
+  - 修正方式
+
+    - 使用interrupt
+
+### 停止线程相关函数解析
+
+#### interrupt
+
+- 如何分析native方法 去看openjdk源码
 
 
 
+#### 判断是否已中断的方法
+
+- static boolean interrupted()
+
+  - 监测当前线程是否被中断 true 中断 false 没有中断，返回之后将线程中断状态设置为false，那么需要自己进行处理，抛出异常或再次执行interrupted中断
+
+- boolean isInterrupted()
+
+  - 监测当前线程是否被中断
+
+- Thread.intertupted()目标对象
+
+  - 是当前调用的线程
+
+    ```java
+    package threadcoreknowledge.stopthreads;
+    
+    public class RightWayInterrupted {
+    
+        public static void main(String[] args) throws InterruptedException {
+            Thread threadOne = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    for (; ; ) {
+    
+                    }
+                }
+            });
+    
+            threadOne.start();
+            threadOne.interrupt();// 发送中断信号
+    
+            System.out.println("IsInterrupted:" + threadOne.isInterrupted());
+            System.out.println("IsInterrupted:" + threadOne.interrupted());
+            System.out.println("IsInterrupted:" + Thread.interrupted());
+            System.out.println("IsInterrupted:" + threadOne.isInterrupted());
+            threadOne.join();
+            System.out.println("main thread is over ");
+    
+        }
+    }
+    
+    /**
+    	输出结果
+    	IsInterrupted:true
+        IsInterrupted:false
+        IsInterrupted:false
+        IsInterrupted:true
+    */
+    ```
+
+### 面试问题
+
+- 如何停止线程
+
+  >1.采用interrupt来请求，好处可以保证数据安全，要把中断的权利交给被中断线程
+  >
+  >2.想要停止线程，要请求方、被请求方、子方法被调用方互相配合
+  >
+  >​	发出停止请求
+  >
+  >   被停止方法需要处理终端信号
+  >
+  >   如果是run方法调用了其他方法，需要向上抛出异常
+  >
+  >3.最后说错误的方法
+  >
+  >​	stop和suspend被弃用，volatile的boolean方式无法处理长时间阻塞的情况
+
+- 如何处理不可中断的阻塞
+
+  >如果线程阻塞是由于调用了 wait()，sleep() 或 join() 方法，你可以中断线程，通过抛出 InterruptedException 异常来唤醒该线程。
+  >
+  > 但是对于不能响应InterruptedException的阻塞，很遗憾，并没有一个通用的解决方案。 但是我们可以利用特定的其它的可以响应中断的方法，比如ReentrantLock.lockInterruptibly()，比如关闭套接字使线程立即返回等方法来达到目的。 答案有很多种，因为有很多原因会造成线程阻塞，所以针对不同情况，唤起的方法也不同
 
 ## 线程的状态
 
