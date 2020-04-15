@@ -1,7 +1,7 @@
 package threadcoreknowledge.threadobjectcommonmethods;
 
 /**
- * 使用synchronized 实现交替打印0-100的奇偶数
+ * 使用synchronized 实现交替打印0-100的奇偶数，效率比较低下
  */
 public class WaitNotifyPrintOddEvenSyn {
 

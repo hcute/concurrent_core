@@ -615,7 +615,7 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 ### 状态的转化图示
 
-![](/Users/hujianchen/Documents/dev/notes/alibaba_iamcome/java/concurrent_core/线程的状态转换图.png)
+![](线程的状态转换图.png)
 
 
 
@@ -946,9 +946,143 @@ public class BlockedWaitingTimedWaiting implements Runnable{
   - 当线程调用了wait方法释放了锁，但是刚刚被唤醒的时候，不一定能立即拿到锁，notify的线程可能还持有锁，此时线程会进入blocked状态
   - 如果在等待过程中发生异常，线程直接进入Terminated状态
 - 常见面试问题
+  
   - 用程序实现交替打印0-100的奇偶数
+  
+    - 使用synchronized实现，会造成资源的浪费
+  
+      ```java
+      package threadcoreknowledge.threadobjectcommonmethods;
+      
+      /**
+       * 使用synchronized 实现交替打印0-100的奇偶数，效率比较低下
+       */
+      public class WaitNotifyPrintOddEvenSyn {
+      
+          // 新建两个线程
+          // 一个处理偶数，一个处理奇数(用位运算)
+          private static int count;
+          private static final Object lock = new Object();
+      
+          public static void main(String[] args) {
+              Thread enveThread = new Thread(new Runnable() {
+                  @Override
+                  public void run() {
+      
+                      while (count < 100) {
+                          synchronized (lock) {
+                              if ((count&1) == 0) { // 速度更快
+                                  System.out.println(Thread.currentThread().getName() + "：" + count);
+                                  count++;
+                              }
+      
+                          }
+                      }
+                  }
+              },"偶数");
+      
+              Thread oddThread = new Thread(new Runnable() {
+                  @Override
+                  public void run() {
+      
+                      while (count < 100) {
+                          synchronized (lock) {
+                              if ((count&1) != 0) { // 速度更快
+                                  System.out.println(Thread.currentThread().getName() + "：" + count);
+                                  count++;
+                              }
+                          }
+                      }
+                  }
+              },"奇数");
+      
+              enveThread.start();
+              oddThread.start();
+          }
+      
+      
+      }
+      
+      ```
+  
+    - 使用wait 和 notify实现
+  
+      ```java
+      package threadcoreknowledge.threadobjectcommonmethods;
+      
+      /**
+       * 使用wait 和notify
+       * 1.拿到锁就打印
+       * 2.打印完唤醒其他线程，自己wait
+       */
+      public class WaitNotifyPrintOddEvenWait {
+      
+          private static int count = 0;
+          private static final Object lock = new Object();
+      
+          public static void main(String[] args) {
+      
+              Runnable runnable = () -> {
+                  while (count <=100 ) {
+                      synchronized (lock) {
+                          System.out.println(Thread.currentThread().getName() + ":" + count++);
+                          lock.notify();
+                          try {
+                              if (count <=100) {
+                                  lock.wait();
+                              }
+                          } catch (InterruptedException e) {
+                              e.printStackTrace();
+                          }
+                      }
+                  }
+              };
+      
+              Thread t1 = new Thread(runnable);
+              Thread t2 = new Thread(runnable);
+              t1.start();
+              t2.start();
+      
+          }
+      }
+      
+      ```
+  
+    - 手写生产者和消费者模式
+  
+    - wait 为什么需要在synchronized代码块中使用，而sleep则不需要
+  
+      - 为了防止了死锁，wait释放掉了monitor锁
+      - sleep只是针对自己的线程，不会设计到多个线程
+  
+    - wait 和 notify 定义在Object类里，而sleep定义在Thread里面
+  
+      - wait和notify 是锁级别操作，而锁是绑定到对象的，如果定义在Thread中，就会造成局限性，如果一个线程持有多个锁，需要锁之间需要配合
+  
+    - wait属于Object ,如果调用Thread.wait会怎么样
+  
+      - Thread 退出的时候自动notify
+  
+    - notify和notifyAll如何抉择
+  
+      - 是唤醒单个还是多个线程
+  
+    - notifyAll会唤醒所有的线程，但只有一个成功，失败的怎么样
+  
+      - 会进入等待
 
 ### sleep方法详解
+
+#### 作用
+
+- 我只想让线程在预期的时间执行，其他时候不要占用CPU资源
+
+#### 特点
+
+- 不释放锁
+  - 包含synchronized和lock
+- 响应中断
+  - sleep期间会检查中断状态，如果中断，则抛出 InterruptedException 清空中断状态
 
 
 
