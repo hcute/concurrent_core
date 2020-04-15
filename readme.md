@@ -1,4 +1,4 @@
-#  x线程的八大核心基础知识
+#  线程的八大核心基础知识
 ##  创建线程的方法
 
 - 创建方式
@@ -501,7 +501,487 @@
   >
   > 但是对于不能响应InterruptedException的阻塞，很遗憾，并没有一个通用的解决方案。 但是我们可以利用特定的其它的可以响应中断的方法，比如ReentrantLock.lockInterruptibly()，比如关闭套接字使线程立即返回等方法来达到目的。 答案有很多种，因为有很多原因会造成线程阻塞，所以针对不同情况，唤起的方法也不同
 
-## 线程的状态
+## 线程的生命周期
+
+### 线程的6种状态
+
+- New : 以创建但未启动 new Thread() 未调用start()
+- Runnable：调用start()方法后就会进入Runnable，对于操作系统中的read和running
+- Blocked：当线程进入synchronized修饰的代码，并且该锁被其他线程拿走了
+- Waiting：调用以下方法Object.wait()、Thread.join()、LockSupport.park()方法
+- Timed Waiting：调用以下方法Object(time)、Thread.sleep(time)、Thread.join(time)、LockSupport.parkNanos(time)、LockSupport.parkUnitil(time)
+- Terminated：线程执行完成、出现了一个没有被捕获的异常
+
+### 每个状态的含义
+
+```java
+package threadcoreknowledge.sixstates;
+
+/**
+ * 展示线程的New Runnable Terminated，即时是正在运行也是Runnable状态
+ */
+public class NewRunnableTerminated implements Runnable{
+
+
+    public static void main(String[] args) {
+        NewRunnableTerminated r = new NewRunnableTerminated();
+        Thread thread = new Thread(r);
+        System.out.println(thread.getState()); // New状态
+        thread.start();
+        System.out.println(thread.getState()); // Runnable
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println(thread.getState()); // Runnable
+
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println(thread.getState());
+    }
+
+    @Override
+    public void run() {
+        for (int i = 0; i < 1000; i++) {
+            System.out.println(i);
+        }
+    }
+}
+
+```
+
+
+
+```java
+package threadcoreknowledge.sixstates;
+
+/**
+ * 展示 Blocked Waiting Timed_Waiting
+ */
+public class BlockedWaitingTimedWaiting implements Runnable{
+
+
+    public static void main(String[] args) {
+        BlockedWaitingTimedWaiting r = new BlockedWaitingTimedWaiting();
+        Thread t1 = new Thread(r);
+        Thread t2 = new Thread(r);
+
+        t1.start();
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        t2.start();
+        // 打印TIMED_WAITING 因为在sleep中
+        System.out.println(t1.getState());
+        // 打印BLOCKED 因为没有拿到monitor锁
+        System.out.println(t2.getState());
+
+        try {
+            Thread.sleep(2300);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println(t1.getState());
+
+
+    }
+
+    @Override
+    public void run() {
+        try {
+            syn();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private synchronized void syn() throws InterruptedException {
+        Thread.sleep(2000);
+        wait();
+    }
+}
+
+```
+
+
+
+
+
+### 状态的转化图示
+
+![](/Users/hujianchen/Documents/dev/notes/alibaba_iamcome/java/concurrent_core/线程的状态转换图.png)
+
+
+
+### 阻塞状态是什么
+
+**一般习惯把Blocked、Waiting、Timed_waiting 都称之为阻塞状态**
+
+### 面试问题
+
+- 线程有几种状态，线程的生命周期
+
+## Thread和Object中重要的方法
+
+### 重要方法概览
+
+| 类     | 方法名                    | 简介                   |
+| ------ | ------------------------- | ---------------------- |
+| Thread | sleep相关                 | 线程进入休眠           |
+|        | join                      | 等待其他线程执行完毕   |
+|        | yield相关                 | 放弃获取到的CPU资源    |
+|        | currentThread             | 获取当前执行线程的引用 |
+|        | start,run相关             | 启动线程相关           |
+|        | interrupt相关             | 中断线程               |
+|        | stop、suspend、resume相关 | 已废弃                 |
+| Object | wait/notify/notifyAll     | 线程休息或唤醒         |
+
+
+
+### wait、notify、notifyAll方法详解
+
+- 作用、用法
+
+  - 阻塞阶段
+    - 必须先拥有对象的monitor锁
+    - 线程调用wait方法阻塞后，只有以下四种情况会被唤醒
+      - 另一个线程调用monitor锁的notify方法，且刚好被唤醒的是本线程
+      - 另外一个线程调用monitor锁的notifyAll方法
+      - wait设置了超时时间，时间到了就会唤醒，如果传入0就进入了永久等待
+      - 线程自身调用了interrupt
+  - 唤醒阶段
+    - notify唤醒单个正在等待的线程，这个是随机的，多个等待时随机选择，在synchronized内部使用
+    - notifyAll 唤醒所有等待的线程，在synchronized内部使用
+  - 遇到中断
+    - wait 方法之后中断会抛出InterruptException 释放monitor锁
+
+- 代码演示
+
+  - 普通用法
+
+    ```java
+    package threadcoreknowledge.threadobjectcommonmethods;
+    
+    /**
+     * wait和 notify 的基本用法
+     *  代码执行顺序
+     *  证明wait 释放了锁
+     */
+    public class Wait {
+    
+        public static Object object = new Object();
+    
+        public static void main(String[] args) throws InterruptedException {
+            Thread1 t1 = new Thread1();
+            Thread2 t2 = new Thread2();
+            t1.start();
+            Thread.sleep(200);
+            t2.start();
+    
+    
+        }
+    
+        static class Thread1 extends Thread {
+    
+            @Override
+            public void run() {
+                synchronized (object) {
+                    System.out.println("线程"+ Thread.currentThread().getName()+"开始执行");
+                    try {
+                        object.wait(); //释放了锁
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+    
+                    System.out.println("线程" + Thread.currentThread().getName()+"获取到了锁");
+                }
+            }
+    
+        }
+    
+        static class Thread2 extends Thread {
+            @Override
+            public void run() {
+                synchronized (object) {
+                    object.notify(); // 虽然唤醒了但是还是没有释放锁，知道synchronized结束
+                    System.out.println("线程" + Thread.currentThread().getName()+ "调用了notify");
+                }
+            }
+        }
+    }
+    
+    ```
+
+  - notify 和notifyAll
+
+    ```java
+    package threadcoreknowledge.threadobjectcommonmethods;
+    
+    /**
+     * 3个线程，线程1 和线程2 被阻塞，线程3唤醒他们，notify 和 notifyAll 唤醒他们
+     *
+     */
+    public class WaitNotifyNotifyAll implements Runnable{
+    
+        private static final Object resourceA = new Object();
+    
+        public static void main(String[] args) {
+            WaitNotifyNotifyAll r = new WaitNotifyNotifyAll();
+            Thread t1 = new Thread(r);
+            Thread t2 = new Thread(r);
+            Thread t3 = new Thread(() -> {
+                synchronized (resourceA) {
+                    resourceA.notifyAll(); // 此处如果是notify则只能唤醒一个线程
+                    System.out.println(Thread.currentThread().getName() + " notified");
+                }
+            });
+            t1.start();
+            t2.start();
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            t3.start();
+        }
+    
+        @Override
+        public void run() {
+    
+            synchronized (resourceA) {
+                System.out.println(Thread.currentThread().getName() + " got resourceA lock");
+    
+                try {
+                    System.out.println(Thread.currentThread().getName() +" waits to start, release lock ");
+                    resourceA.wait();
+                    System.out.println(Thread.currentThread().getName() +" is waiting to end");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+    
+            }
+    
+        }
+    }
+    
+    ```
+
+  - 锁之间是独立的
+
+    ```java
+    package threadcoreknowledge.threadobjectcommonmethods;
+    
+    /**
+     * 证明wait只释放当前的那把锁
+     */
+    public class WaitNotifyReleaseOwnMonitor {
+    
+    
+        private static volatile Object resouceA = new Object();
+        private static volatile Object resouceB = new Object();
+    
+        public static void main(String[] args) {
+            Thread t1 = new Thread(() -> {
+                synchronized (resouceA) {
+                    System.out.println(Thread.currentThread().getName() + " got resourceA lock ");
+                    synchronized (resouceB) {
+                        System.out.println(Thread.currentThread().getName() + " got resourceB lock ");
+                        try {
+                            System.out.println(Thread.currentThread().getName() + " releases resourceA lock ");
+                            resouceA.wait();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+    
+            });
+    
+            Thread t2 = new Thread(() -> {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                synchronized (resouceA) {
+                    System.out.println(Thread.currentThread().getName() + " got resourceA lock. ");
+                    System.out.println(Thread.currentThread().getName() + " try got resourceA lock. ");
+                    synchronized (resouceB) {
+                        System.out.println(Thread.currentThread().getName() + " got resourceB lock. ");
+                    }
+                }
+            });
+    
+            t1.start();
+            t2.start();
+        }
+    }
+    
+    ```
+
+    
+
+- 特点和性质
+
+  - 必须先拥有monitor
+  - 只能唤醒其中一个
+  - 属于Object类
+  - 类似功能 Condition，jdk的阻塞队列使用了Condition
+
+- 原理
+
+  - 多个线程同时进行锁的抢占
+  - 其中一个获取到锁进入线程执行，执行过程中如果调用了wait方法就会释放锁
+  - 释放锁之后进入等待状态，其他线程开始获取锁，继续执行
+
+- 实现生产者和消费者模式
+
+  - 使用wait和notify实现
+
+    ```java
+    package threadcoreknowledge.threadobjectcommonmethods;
+    
+    import java.util.Date;
+    import java.util.LinkedList;
+    
+    /**
+     * 用 notify /wait 方式实现 不用阻塞队列
+     */
+    public class ProducerConsumerModel {
+    
+    
+        public static void main(String[] args) {
+            EventStorage eventStorage = new EventStorage();
+            Producer producer = new Producer(eventStorage);
+            Consumer consumer = new Consumer(eventStorage);
+            new Thread(producer).start();
+            new Thread(consumer).start();
+        }
+    }
+    
+    
+    class Producer implements Runnable{
+    
+        private EventStorage storage;
+    
+        public Producer(EventStorage storage) {
+            this.storage = storage;
+        }
+    
+        @Override
+        public void run() {
+            for (int i = 0; i < 100; i++) {
+    
+                storage.put();
+            }
+        }
+    }
+    
+    class Consumer implements Runnable{
+    
+        private EventStorage storage;
+    
+        public Consumer(EventStorage storage) {
+            this.storage = storage;
+        }
+    
+        @Override
+        public void run() {
+            for (int i = 0; i < 100; i++) {
+                storage.take();
+            }
+        }
+    }
+    
+    
+    class EventStorage{
+        private int maxSize;
+        private LinkedList<Date> storage;
+    
+        public EventStorage(){
+            maxSize = 10;
+            storage = new LinkedList<>();
+        }
+    
+        public synchronized void put(){
+            while (storage.size() == maxSize) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            storage.add(new Date());
+            System.out.println("仓库里有了" + storage.size() + "个产品");
+            notify();
+    
+        }
+    
+        public synchronized void take(){
+            while (storage.size() == 0) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("拿到了" + storage.poll() + "，仓库的还剩下" + storage.size());
+            notify();
+        }
+    }
+    
+    
+    
+    ```
+
+    
+
+- 注意点
+  - 当线程调用了wait方法释放了锁，但是刚刚被唤醒的时候，不一定能立即拿到锁，notify的线程可能还持有锁，此时线程会进入blocked状态
+  - 如果在等待过程中发生异常，线程直接进入Terminated状态
+- 常见面试问题
+  - 用程序实现交替打印0-100的奇偶数
+
+### sleep方法详解
+
+
+
+### join方法详解
+
+
+
+### yield方法详解
+
+
+
+### Thread.currentThread()方法详解
+
+
+
+### start 和 run 方法
+
+
+
+### stop、suspend、resume方法
+
+
+
+### 面试问题
+
+- 为什么线程通信的方法wait()、notify()和notifyAll()被定义在Object类，而sleep定义在Thread类里
+- 用3种方法实现生产者模式
+- JavaSE8 和java1.8和JDK8是什么关系，是同一东西吗？
+- Join 和 sleep 和 wait期间线程的状态分别是什么，为什么？
+
+
+
+
 
 ## 线程各种属性
 
