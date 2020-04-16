@@ -22,11 +22,20 @@ public class MultiThreadError3 {
         return states;
     }
 
+    public Map<String,String> getStatesImproved(){
+        return new HashMap<>(states);
+    }
+
     public static void main(String[] args) {
         MultiThreadError3 multiThreadError3 = new MultiThreadError3();
         Map<String, String> states = multiThreadError3.getStates();
-        System.out.println(states.get("1"));
-        states.remove("1");
+//        System.out.println(states.get("1"));
+//        states.remove("1");
+//        System.out.println(states.get("1"));
+
+        Map<String, String> statesImproved = multiThreadError3.getStatesImproved();
+        System.out.println(statesImproved.get("1"));
+        statesImproved.remove("1");
         System.out.println(states.get("1"));
 
     }
