@@ -1302,36 +1302,321 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 - 默认线程名字的源码分析
 - 如何修改线程的名字
-
-
+  - 构造方法传入
+  - setName
 
 ### 守护线程
+
+- 作用：给用户线程提供服务，看线程是否阻止 JVM 停止
+- 特性
+  - 线程的类型默认继承自父线程，守护线程创建的线程也是守护线程
+  - 被谁启动，都是由jvm启动
+  - 不影响jvm的退出，jvm退出只看有没有用户线程，没有用户线程就可以退出
+- 守护线程和普通线程的区别
+  - 整体无区别，唯一区别就是是否会影响jvm退出
+- 我们是否需要给线程设置为守护线程
+  - 我们不应该把自己的用户线程设置为守护线程，如果我们的线程正在读取文件，但是此线程被设置为守护线程了，当jvm检测到没有用户线程了，突然停止，此时会造成数据的不一致
 
 
 
 ### 线程的优先级
 
-
-
-### 总结属性
+- 10个级别，默认是5 
+- 程序的设计不应该依赖于优先级
+  - 不同的操作系统不一样，windows中只有 7 个级别 linux 无优先级
+  - 优先级会被操作系统改变
 
 
 
 ### 常见面试问题
 
 - 什么时候需要设置守护线程
+  - 通常我们不需要设置守护线程，jvm的守护线程足够
 - 我们如何利用程序优先级来帮助程序运行，有哪些禁忌
-- 不同的操作系统如果处理优先级问题
+  - 我们不应该用优先级来帮助程序运行，因为每个操作系统对优先级不一样
+- 不同的操作系统如何处理优先级问题
+  - windows 有7个优先级，而且有优先级推进程序，linux没有
 
 ## 未捕获异常如何处理
+
+- 处理方式
+  - UncaughtExceptionHandler
+- 什么需要 UncaughtExceptionHandler
+  - 主线程可以轻松的发现异常，子线程确不可以
+    - 子线程发生异常，主线程依然在继续执行
+  - 子线程的异常无法用传统方式捕获
+  - 不能直接捕获的后果，提高健壮性
+- 两种解决方案
+  - 方案一（不推荐）：手动在每个run方法里面进行try catch
+  - 方案二 （推荐）：
+    - UncaughtExceptionHandler 接口
+      - void uncaughtException(Thread t, Throwable e)
+    - 实现方式
+      - 给程序统一设置
+      - 给每个线程单独设置
+      - 给线程池设置
+
+### 常见面试问题
+
+- 异常体系图
+  - Throwable
+    - Error
+    - Exception
+      - RuntimeException
+      - Exception
+- 实际工作中，如何全局处理异常，为什么要全局处理？不处理行不行 ？
+  - 定义自己的UncaughtExceptionHandler 类，设置线程的UncaughtExceptionHandler为自己定义的异常处理类
+  - 如果不处理全局异常，会把异常打印到客户端，对于系统不安全，
+  - 不处理不行，会造成系统错误不会被及时发现
+- run方法是否可以抛出异常，如果抛出异常，线程的状态会怎么样
+  - 不可以抛出异常，如果RuntimeException 没处理，线程会终止
+- 线程中如何处理某个未处理异常或者说叫做运行时异常
+  - 定义自己的UncaughtExceptionHandler 类，设置线程的UncaughtExceptionHandler为自己定义的异常处理类
+
+## 线程会产生的问题
+
+### 线程安全
+
+#### 概述
+
+- a++ 多线程下出现消失
+
+- 死锁活跃性问题
+
+  - 死锁
+  - 活锁
+  - 饥饿
+
+- 对象发布和初始化时候的安全问题
+
+  - 什么是发布
+    - 声明为public
+    - return 一个对象
+    - 把对象作为参数传递到其他类的方法中
+  - 什么是逸出
+    - 方法返回一个private对象
+    - 还未完成初始化（构造函数没有完全执行完毕）就把对象提供给外界
+  - 如何解决逸出
+    - 副本
+    - 工厂模式
+
+- 总结各种需要考虑线程安全的情况
+
+  - 访问共享资源，会有并发风险，比如对象的属性，静态变量，共享缓存，数据库等
+
+  - 所有依赖时序的操作，即使每一步操作都是线程安全的，还是存在并发问题
+
+  - 不同的数据之间存在捆绑关系的时候 
+
+  - 我们使用其他类的时候，如果对方没有声明自己是线程安全的，大概率会出现并发问题
+
+    - HashMap，并发调用出错
+
+    
+
+#### 细节
+
+- 什么是线程安全
+
+  >Brian Goetz  《Java Concurrecy In Practice》：
+  >
+  >​	当多个线程访问一个对象时，如果不用考虑这些线程在运行时环境下的调度和交替执行，也不需要额外的同步，或者在调用方进行任何其他的协调操作，调用这个对象的行为都可以获得正确的结果，那么这个对象就是线程安全的
+
+  - 一些线程不安全的时候
+    - 比如get同时set需要额外处理
+  - 线程安全的成本
+    - 运行速度
+    - 设计成本
+    - trade off
+  - 如果一个类不用于多线程就不需要进行多线程设计
+
+- 什么情况下会出现线程安全，怎么避免
+
+  >数据征用：同时写
+  >
+  >竞争条件：执行顺序问题
+  - 消失的 a++
+
+    ```java
+    package threadcoreknowledge.concurrcyinpractice;
+    
+    
+    import java.util.concurrent.BrokenBarrierException;
+    import java.util.concurrent.CyclicBarrier;
+    import java.util.concurrent.atomic.AtomicInteger;
+    
+    /**
+     * a++运行结果出错，并找出出错的位置
+     */
+    public class MultiThreadsError implements Runnable{
+        int index = 0;
+        static AtomicInteger realIndex = new AtomicInteger();
+        static AtomicInteger wrongCount = new AtomicInteger();
+        final boolean[] marked = new boolean[10000000];
+        static volatile MultiThreadsError multiThreadsError = new MultiThreadsError();
+        static volatile CyclicBarrier cyclicBarrier1 = new CyclicBarrier(2);
+        static volatile CyclicBarrier cyclicBarrier2 = new CyclicBarrier(2);
+    
+    
+        public static void main(String[] args) throws InterruptedException {
+            Thread t1 = new Thread(multiThreadsError);
+            Thread t2 = new Thread(multiThreadsError);
+            t1.start();
+            t2.start();
+            t1.join();
+            t2.join();
+            System.out.println("表面上的错误" + multiThreadsError.index);
+            System.out.println("真正运行的次数" + realIndex);
+            System.out.println("发生错误的次数" + wrongCount);
+    
+    
+        }
+    
+        @Override
+        public void run() {
+            marked[0] = true;
+            for (int i = 0; i < 10000; i++) {
+                try {
+                    cyclicBarrier2.reset();
+                    cyclicBarrier1.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (BrokenBarrierException e) {
+                    e.printStackTrace();
+                }
+                index++;
+                // 1 - 1 false
+                // 2 - 2 true 这种没有问题
+                try {
+                    cyclicBarrier1.reset();
+                    cyclicBarrier2.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (BrokenBarrierException e) {
+                    e.printStackTrace();
+                }
+                realIndex.incrementAndGet();
+                synchronized (multiThreadsError){
+                    if (marked[index] && marked[index-1]) {
+                        System.out.println("发生错误：" + index);
+                        wrongCount.incrementAndGet();
+                    }
+                    marked[index] =true;
+                }
+    
+            }
+        }
+    }
+    
+    
+    ```
+
+  - 死锁，活锁，饥饿
+
+    ```java
+    package threadcoreknowledge.concurrcyinpractice;
+    
+    /**
+     * 演示死锁
+     */
+    public class MultiThreadErrors2 implements Runnable{
+    
+        int flag = 1;
+    
+        static Object object1 = new Object();
+        static Object object2 = new Object();
+    
+        public static void main(String[] args) {
+            MultiThreadErrors2 r1 = new MultiThreadErrors2();
+            MultiThreadErrors2 r2 = new MultiThreadErrors2();
+            r1.flag = 1;
+            r2.flag = 0;
+            Thread t1 = new Thread(r1);
+            Thread t2 = new Thread(r2);
+            t1.start();
+            t2.start();
+    
+    
+        }
+        @Override
+        public void run() {
+            System.out.println("flag = " + flag) ;
+            if (flag == 1) {
+                synchronized (object1){
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    synchronized (object2){
+                        System.out.println("1");
+                    }
+                }
+            }
+    
+            if (flag == 0) {
+                synchronized (object2){
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    synchronized (object1){
+                        System.out.println("0");
+                    }
+                }
+            }
+        }
+    }
+    
+    ```
+
+    
+
+  - 对象发布和初始化的时候的安全问题
+
+    - 什么是发布
+      - 对象声明为public
+      - 方法return 一个对象
+      - 类对象作为参数传入其他类的方法
+    - 什么是逸出
+      - 方法返回一个private对象 （private的本意是不让外部访问）
+      - 还未完成初始化（构造函数没有完全执行完毕）就把对下提供给外界
+        - 在构造函数中未初始化完毕就this赋值
+        - 隐式逸出 注册监听事件
+        - 构造函数中运行线程
+
+
+
+### 性能问题
+
+- 服务响应慢，吞吐量，资源消耗过高
+- 数据没有错误，但依然危害巨大
+- 引入多线程不能本末倒置
+
+
+
+### 为什么多线程会带来性能问题
+
+- 调到：上下文切换
+  - 什么是上下文切换
+  - 缓存开销
+  - 何时会导致密集的上下文切换
+    - 频繁的竞争锁，或者由于IO读写等原因导致频繁阻塞
+- 内存同步
+  - Java 内存模型
+
+
 
 
 
 ### 常见面试问题
 
+- 你知道哪些线程安全问题
+- 平时哪些情况下需要额外注意线程安全问题
+- 什么是多线程的上下文切换
 
 
-## 线程会产生的问题
 
 
 
