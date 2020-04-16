@@ -1229,8 +1229,6 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 - CountDownLatch 和 CyclicBarrier类的使用
 
-  - 
-
 - 原理
 
   - join底层使用了wait但是没有notify的方法
@@ -1377,45 +1375,6 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 ### 线程安全
 
-#### 概述
-
-- a++ 多线程下出现消失
-
-- 死锁活跃性问题
-
-  - 死锁
-  - 活锁
-  - 饥饿
-
-- 对象发布和初始化时候的安全问题
-
-  - 什么是发布
-    - 声明为public
-    - return 一个对象
-    - 把对象作为参数传递到其他类的方法中
-  - 什么是逸出
-    - 方法返回一个private对象
-    - 还未完成初始化（构造函数没有完全执行完毕）就把对象提供给外界
-  - 如何解决逸出
-    - 副本
-    - 工厂模式
-
-- 总结各种需要考虑线程安全的情况
-
-  - 访问共享资源，会有并发风险，比如对象的属性，静态变量，共享缓存，数据库等
-
-  - 所有依赖时序的操作，即使每一步操作都是线程安全的，还是存在并发问题
-
-  - 不同的数据之间存在捆绑关系的时候 
-
-  - 我们使用其他类的时候，如果对方没有声明自己是线程安全的，大概率会出现并发问题
-
-    - HashMap，并发调用出错
-
-    
-
-#### 细节
-
 - 什么是线程安全
 
   >Brian Goetz  《Java Concurrecy In Practice》：
@@ -1435,7 +1394,7 @@ public class BlockedWaitingTimedWaiting implements Runnable{
   >数据征用：同时写
   >
   >竞争条件：执行顺序问题
-  - 消失的 a++
+  - 数据结果错误：消失的 a++
 
     ```java
     package threadcoreknowledge.concurrcyinpractice;
@@ -1579,34 +1538,314 @@ public class BlockedWaitingTimedWaiting implements Runnable{
       - 对象声明为public
       - 方法return 一个对象
       - 类对象作为参数传入其他类的方法
+      
     - 什么是逸出
       - 方法返回一个private对象 （private的本意是不让外部访问）
+      
+        ```java
+        package threadcoreknowledge.concurrcyinpractice;
+        
+        import java.util.HashMap;
+        import java.util.Map;
+        
+        /**
+         * 发布逸出
+         */
+        public class MultiThreadError3 {
+        
+            private Map<String,String> states;
+        
+            public MultiThreadError3() {
+                this.states = new HashMap<>();
+                states.put("1","周一");
+                states.put("2","周二");
+                states.put("3","周三");
+                states.put("4","周四");
+            }
+        
+            public Map<String,String> getStates(){
+                return states;
+            }
+        
+            public static void main(String[] args) {
+                MultiThreadError3 multiThreadError3 = new MultiThreadError3();
+                Map<String, String> states = multiThreadError3.getStates();
+                System.out.println(states.get("1"));
+                states.remove("1");
+                System.out.println(states.get("1"));
+        
+            }
+        }
+        ```
+      
+        
+      
       - 还未完成初始化（构造函数没有完全执行完毕）就把对下提供给外界
         - 在构造函数中未初始化完毕就this赋值
+        
+          ```java
+          package threadcoreknowledge.concurrcyinpractice;
+          
+          /**
+           * 构造函数未初始化完成就this赋值
+           */
+          public class MultiThreadError4 {
+              static Point point;
+          
+              public static void main(String[] args) throws InterruptedException {
+                  new PointMaker().start();
+                  Thread.sleep(10);
+                  if (point != null) {
+                      System.out.println(point);
+                  }
+              }
+          }
+          
+          class Point{
+              private final int x,y;
+          
+              public Point(int x, int y) throws InterruptedException {
+                  this.x = x;
+                  MultiThreadError4.point = this;
+                  Thread.sleep(100);
+                  this.y = y;
+              }
+          
+          
+              @Override
+              public String toString() {
+                  return "Point{" +
+                          "x=" + x +
+                          ", y=" + y +
+                          '}';
+              }
+          }
+          
+          
+          class PointMaker extends Thread{
+          
+          
+              @Override
+              public void run() {
+                  try {
+                      new Point(1,1);
+                  } catch (InterruptedException e) {
+                      e.printStackTrace();
+                  }
+              }
+          }
+          ```
+        
+          
+        
         - 隐式逸出 注册监听事件
+        
+          ```java
+          package threadcoreknowledge.concurrcyinpractice;
+          
+          /**
+           * 观察者模式
+           */
+          public class MultiThreadError5 {
+              int count = 0;
+          
+              public static void main(String[] args) {
+                  MySource mySource = new MySource();
+                  new Thread(new Runnable() {
+                      @Override
+                      public void run() {
+                          try {
+                              Thread.sleep(10);
+                          } catch (InterruptedException e) {
+                              e.printStackTrace();
+                          }
+                          mySource.eventCome(new Event() {
+          
+                          });
+                      }
+                  }).start();
+                  MultiThreadError5 multiThreadError5 = new MultiThreadError5(mySource);
+              }
+          
+              public MultiThreadError5(MySource mySource) {
+                  // 内部类持有外部类的this对象
+                  mySource.registerListener(new EventListener() {
+                      @Override
+                      public void onEvent(Event e) {
+                          System.out.println("\n我得到的数字是" + count);
+                      }
+                  });
+                  for (int i = 0; i < 10000; i++) {
+                      System.out.print(i);
+                  }
+                  count = 100;
+              }
+          
+              static class MySource {
+                  private EventListener listener;
+                  void registerListener(EventListener eventListener){
+                      this.listener = eventListener;
+                  }
+          
+                  void eventCome(Event e) {
+                      if (listener != null){
+                          listener.onEvent(e);
+                      }else{
+                          System.out.println("还未完成初始化");
+                      }
+                  }
+              }
+          
+              interface EventListener{
+                  void onEvent(Event e);
+              }
+              interface Event{
+          
+              }
+          }
+          ```
+        
         - 构造函数中运行线程
+        
+          ```java
+          package threadcoreknowledge.concurrcyinpractice;
+          
+          import java.util.HashMap;
+          import java.util.Map;
+          
+          /**
+           * 发布逸出
+           */
+          public class MultiThreadError6 {
+          
+              private Map<String,String> states;
+          
+              public MultiThreadError6() {
+                  new Thread(new Runnable() {
+                      @Override
+                      public void run() {
+                          states = new HashMap<>();
+                          states.put("1","周一");
+                          states.put("2","周二");
+                          states.put("3","周三");
+                          states.put("4","周四");
+                      }
+                  }).start();
+              }
+          
+              public Map<String,String> getStates(){
+                  return states;
+              }
+          
+              public static void main(String[] args) {
+                  MultiThreadError6 multiThreadError3 = new MultiThreadError6();
+                  Map<String, String> states = multiThreadError3.getStates();
+                  System.out.println(states.get("1"));
+                  states.remove("1");
+                  System.out.println(states.get("1"));
+          
+              }
+          }
+          
+          ```
+      
+    - 如何解决逸出
+    
+      - 解决方法返回private属性 - 返回副本
+    
+        ```java
+        package threadcoreknowledge.concurrcyinpractice;
+        
+        import java.util.HashMap;
+        import java.util.Map;
+        
+        /**
+         * 发布逸出
+         */
+        public class MultiThreadError3 {
+        
+            private Map<String,String> states;
+        
+            public MultiThreadError3() {
+                this.states = new HashMap<>();
+                states.put("1","周一");
+                states.put("2","周二");
+                states.put("3","周三");
+                states.put("4","周四");
+            }
+        
+            public Map<String,String> getStates(){
+                return states;
+            }
+        		
+            // 返回副本
+            public Map<String,String> getStatesImproved(){
+                return new HashMap<>(states);
+            }
+        
+            public static void main(String[] args) {
+                MultiThreadError3 multiThreadError3 = new MultiThreadError3();
+                Map<String, String> states = multiThreadError3.getStates();
+        //        System.out.println(states.get("1"));
+        //        states.remove("1");
+        //        System.out.println(states.get("1"));
+        
+                Map<String, String> statesImproved = multiThreadError3.getStatesImproved();
+                System.out.println(statesImproved.get("1"));
+                statesImproved.remove("1");
+                System.out.println(states.get("1"));
+        
+            }
+        }
+        ```
+    
+      - 还未完成初始化 - 工厂模式
+  
+- 线程安全总结
 
+  - 访问共享变量或资源，会有并发风险
 
+    >比如：对象的属性，静态变量，共享缓存，数据库等
+
+  - 依赖时序的操作，即时每一步操作都是线程安全，还是存在并发问题
+
+    >Read-modify-write check-then-act
+
+  - 不同的数据之间存在捆绑关系的时候
+
+    >需要进行原子操作，比如ip和端口号的绑定
+
+  - 我们使用其他类的时候，如果对方没有声明自己是线程安全的，可能也会出现并发问题
+
+    > hashMap 是不安全的，在多线程情况下使用CoccurrentHashMap
 
 ### 性能问题
 
-- 服务响应慢，吞吐量，资源消耗过高
+- 什么是性能问题，有哪些体现
+  - 服务响应慢，吞吐量，资源消耗过高
 - 数据没有错误，但依然危害巨大
-- 引入多线程不能本末倒置
+  - 为什么有app的出现，因为H5没法取代，响应慢
 
 
 
 ### 为什么多线程会带来性能问题
 
-- 调到：上下文切换
+- 调度：上下文切换
+
+  发生线程调度：当可运行的线程的数量超出了CPU的核心数
+
   - 什么是上下文切换
+    - 当某个线程Thread.sleep ，线程调度器就会让此线程进入阻塞，其他线程就会被执行，就发生了上下文切换
+    - 切换时需要保存，阻塞线程执行到了哪里，寄存器等
   - 缓存开销
+    - 缓存失效
   - 何时会导致密集的上下文切换
-    - 频繁的竞争锁，或者由于IO读写等原因导致频繁阻塞
-- 内存同步
-  - Java 内存模型
+    - 频繁的竞争锁，或者由于IO读写等原因导致**频繁阻塞**
 
-
+- 协作：内存同步
+  
+  - Java 内存模型 jmm
+  - 编译器会优化程序时，可能会进行指令重排序或者锁的优化或者内存优化
 
 
 

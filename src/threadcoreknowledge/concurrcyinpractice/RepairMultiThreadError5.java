@@ -3,16 +3,18 @@ package threadcoreknowledge.concurrcyinpractice;
 /**
  * 观察者模式
  */
-public class MultiThreadError5 {
+public class RepairMultiThreadError5 {
     int count = 0;
 
-    public static void main(String[] args) {
+    private EventListener listener;
+
+    public static void main(String[] args) throws InterruptedException {
         MySource mySource = new MySource();
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    Thread.sleep(10);
+                    Thread.sleep(100);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -21,21 +23,28 @@ public class MultiThreadError5 {
                 });
             }
         }).start();
-        MultiThreadError5 multiThreadError5 = new MultiThreadError5(mySource);
+
+        RepairMultiThreadError5 multiThreadError5 = getInstance(mySource);
     }
 
-    public MultiThreadError5(MySource mySource) {
+    private RepairMultiThreadError5(MySource mySource) {
         // 内部类持有外部类的this对象
-        mySource.registerListener(new EventListener() {
+        listener = new EventListener() {
             @Override
             public void onEvent(Event e) {
                 System.out.println("\n我得到的数字是" + count);
             }
-        });
+        };
         for (int i = 0; i < 10000; i++) {
             System.out.print(i);
         }
         count = 100;
+    }
+
+    public static  RepairMultiThreadError5 getInstance(MySource mySource){
+        RepairMultiThreadError5 safeInstance = new RepairMultiThreadError5(mySource);
+        mySource.registerListener(safeInstance.listener);
+        return safeInstance;
     }
 
     static class MySource {
