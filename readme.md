@@ -1080,29 +1080,195 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 #### 特点
 
 - 不释放锁
+  
   - 包含synchronized和lock
+  
 - 响应中断
+  
   - sleep期间会检查中断状态，如果中断，则抛出 InterruptedException 清空中断状态
+  
+  >sleep方法会让线程进入Timed_waiting状态，并且不占用CPU资源，但是不会释放锁，直到规定时间后再继续执行，休眠的过程中如果被中断，会抛出异常并清除中断状态
 
-
+- 常见面试问题
+  - wait/notify、sleep的异同
+    - 相同
+      - wait 和 sleep方法都可以是线程阻塞，对应的线程状态位waiting和Timed_waiting
+      - wait 和 sleep 方法都可以响应中断
+    - 不同
+      - wait 方法的执行必须在同步方法中进行，而sleep不需要
+      - 同步方法里执行sleep方法时，不会释放monitor，但是wait会释放monitor锁
+      - sleep方法短暂休眠之后会主动退出阻塞，而没有制定时间的wait方法则需要被其他线程中断后才能退出阻塞
+      - wait和notify、notfiyAll时Object方法，而sleep时Thread 的方法
 
 ### join方法详解
 
+- 作用
 
+  - 因为新的线程加入了我们，我们需要等他执行完再出发
+
+- 用法
+
+  - main等待thread1执行完毕，注意谁等谁
+
+- 三个例子
+
+  等待资源加载完成
+
+  - 普通用法
+
+    ```java
+    package threadcoreknowledge.threadobjectcommonmethods;
+    
+    import java.util.concurrent.TimeUnit;
+    
+    /**
+     * 演示join ，注意语句的输出顺序
+     */
+    public class Join {
+        public static void main(String[] args) throws InterruptedException {
+    
+    
+            Runnable r = () ->{
+                try {
+                    TimeUnit.SECONDS.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println(Thread.currentThread().getName() + "执行完毕");
+            };
+    
+            Thread t1 = new Thread(r);
+            Thread t2 = new Thread(r);
+            t1.start();
+            t2.start();
+            System.out.println("开始等待子线程运行完毕");
+            t1.join();
+            t2.join();
+            System.out.println("所有线程执行完毕");
+        }
+    }
+    
+    ```
+
+  - 遇到中断
+
+    ```java
+    package threadcoreknowledge.threadobjectcommonmethods;
+    
+    import java.util.concurrent.TimeUnit;
+    
+    /**
+     * 等待的是主线程，主线程interrupt
+     */
+    public class JoinInterrupt {
+        public static void main(String[] args) {
+            Thread mainThread = Thread.currentThread();
+            Runnable r = () -> {
+                try {
+                    mainThread.interrupt();
+                    TimeUnit.SECONDS.sleep(1);
+                    System.out.println(Thread.currentThread().getName() + "finish!");
+                } catch (InterruptedException e) {
+                    System.out.println("子线程被中断了");
+                }
+            };
+    
+            Thread thread = new Thread(r);
+            thread.start();
+            System.out.println("等待子线程运行完毕");
+    
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                System.out.println(Thread.currentThread().getName() + "中断了");
+                thread.interrupt();
+            }
+            System.out.println("子线程已运行完成");
+        }
+    }
+    ```
+
+  - join时线程的状态，等待线程为Waiting状态
+
+    ```java
+    package threadcoreknowledge.threadobjectcommonmethods;
+    
+    
+    
+    /**
+     * 先join 再main线程的状态
+     */
+    public class JoinThreadState {
+    
+        public static void main(String[] args) throws InterruptedException {
+            Thread mainThread = Thread.currentThread();
+            Thread thread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Thread.sleep(3000);
+                        System.out.println(mainThread.getState());
+                        System.out.println(Thread.currentThread().getName() + "子线程执行完毕了");
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            thread.start();
+            System.out.println("等待子线程执行完毕");
+            thread.join();
+            System.out.println("子线程运行完毕");
+    
+    
+        }
+    }
+    
+    ```
+
+    
+
+- CountDownLatch 和 CyclicBarrier类的使用
+
+  - 
+
+- 原理
+
+  - join底层使用了wait但是没有notify的方法
+
+  - 因为Thread.run 方法执行完会执行ensure_join 唤醒，所以不建议采用Thread为lock
+
+  - 等价代码
+
+    ```java
+    synchronized (t1) {
+      t1.wait();
+    }
+    ```
+
+- 常见面试问题
+
+  - join期间，线程处于哪种线程状态
+    - 等待的线程处于waiting状态
 
 ### yield方法详解
 
-
+- 作用
+  - 释放我的CPU时间片，但是线程还是Runnable状态，持有锁，不会阻塞
+- 定位
+  - JVM不保证遵循
+- yield和sleep区别
+  - sleep 会进入阻塞状态，但是yield还是处于Runnable状态
 
 ### Thread.currentThread()方法详解
 
-
-
 ### start 和 run 方法
 
-
+- run只是普通方法
+- start方法时线程启动的方法
 
 ### stop、suspend、resume方法
+
+- 弃用
 
 
 
@@ -1119,7 +1285,51 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 ## 线程各种属性
 
-## 线程中的异常处理
+### 属性纵览
+
+| 属性名称                 | 用途                                                         |
+| ------------------------ | ------------------------------------------------------------ |
+| 编号（ID）               | 每一个线程有自己的ID，用于标示不同的线程                     |
+| 名称（Name）             | 作用让用户或程序员在开发，调试，运行过程中，更容易区分每个不同的线程，定位问题 |
+| 是否是守护线程(isDaemon) | true代表是守护线程，false代表线程是非守护线程，就是用户线程  |
+| 优先级(Priority)         | 优先级这个属性的目的是告诉线程调度器，用户希望哪些线程相对多运行，哪些线程少运行 |
+
+### 线程id
+
+自增的，初始化为0 ，但是里面是使用++i操作，所以是1开始的
+
+### 线程的名字
+
+- 默认线程名字的源码分析
+- 如何修改线程的名字
+
+
+
+### 守护线程
+
+
+
+### 线程的优先级
+
+
+
+### 总结属性
+
+
+
+### 常见面试问题
+
+- 什么时候需要设置守护线程
+- 我们如何利用程序优先级来帮助程序运行，有哪些禁忌
+- 不同的操作系统如果处理优先级问题
+
+## 未捕获异常如何处理
+
+
+
+### 常见面试问题
+
+
 
 ## 线程会产生的问题
 
