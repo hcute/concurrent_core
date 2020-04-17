@@ -1894,7 +1894,7 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 - 是什么
   - java memory model
-  - c语言不存在内存模型，导致在不同的环境下产生不同的结果，从而出现了一个标准（jmm），让多线程运行可期
+  - C语言不存在内存模型，导致在不同的环境下产生不同的结果，从而出现了一个标准（jmm），让多线程运行可期
   - 是一组规范，需要jvm遵守，让开发者，更方便的开发多线程程序
   - 是工具类和关键字的原理
     - volatile、synchronized、lock等原理都是jmm
@@ -1905,11 +1905,200 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 ## 重排序
 
+- 代码演示重排序
 
+  ```java
+  package threadcoreknowledge.jmm;
+  
+  import java.util.concurrent.CountDownLatch;
+  
+  /**
+   * 重排序现象
+   *  直到达到某种条件才停止，测试小概率事件
+   *      可能出现以下记过
+   *       x = 0 y = 1
+   *       x = 1 x = 0
+   *       x = 1 y = 1
+   *       x = 0 y = 0 此种情况发生了重排序
+   */
+  public class OutOfOrderExecution {
+      private static int x=0,y=0;
+      private static int a=0,b=0;
+  
+      public static void main(String[] args) throws InterruptedException {
+          int i = 0;
+          for (;;){
+              i++;
+              x =0;
+              y =0;
+              a=0;
+              b=0;
+              CountDownLatch latch = new CountDownLatch(1);
+              Thread one = new Thread(new Runnable() {
+                  @Override
+                  public void run() {
+                      try {
+                          latch.await();
+                      } catch (InterruptedException e) {
+                          e.printStackTrace();
+                      }
+                      a = 1;
+                      x = b;
+                  }
+              });
+              Thread two = new Thread(new Runnable() {
+                  @Override
+                  public void run() {
+                      try {
+                          latch.await();
+                      } catch (InterruptedException e) {
+                          e.printStackTrace();
+                      }
+                      b = 1;
+                      y = a;
+                  }
+              });
+  
+              one.start();
+              two.start();
+              latch.countDown();
+              one.join();
+              two.join();
+              String result = "第" + i +"次("+x+","+y+")";
+              if (x == 0 && y ==0){
+                  System.out.println("x = " + x + ",y = " + y);
+                  break;
+              }else{
+                  System.out.println(result);
+              }
+  
+          }
+  
+  
+      }
+  
+  }
+  
+  /**
+  第103781次(0,1)
+  第103782次(0,1)
+  x = 0,y = 0
+  */
+  ```
+
+- 重排序可以提高速度
+
+  >a = 2;
+  >
+  >b = 3;
+  >
+  >a = a + 2;
+  >
+  >不重排
+  >
+  >a =3 对应 => load a ; set a = 2 ; store a; 
+  >
+  >b =3 对应 => load b; set b = 3 ;store b;
+  >
+  >a = a + 2    => load a ; set a = 4 ; store a; 
+  >
+  >重排之后
+  >
+  >a = 2； a = a+ 2; => load a ; set a =2; set a = 4; store a;
+  >
+  >b =3 对应 => load b; set b = 3 ;store b;
+
+- 重排序的三种情况
+
+  - 编译器优化, 包含 jvm 和 jit 编译器
+  - CPU优化
+  - 内存的“重排序”
+    - 线程A修改线程B确看不到，引出了可见性
 
 ## 可见性
 
+- 代码演示可见性
 
+  ```java
+  package threadcoreknowledge.jmm;
+  
+  /**
+   * 演示可见性带来的问题
+   *  可能出现
+   *      a=3,b=2
+   *      a=3,b=3
+   *      a=1,b=2
+   *      b=3,a=1 出现了可见性问题
+   *
+   */
+  public class FieldVisibility {
+  
+      int a = 1;
+      int b = 2;
+  
+      public static void main(String[] args) {
+          while (true) {
+              FieldVisibility test = new FieldVisibility();
+              new Thread(new Runnable() {
+                  @Override
+                  public void run() {
+                      try {
+                          Thread.sleep(1);
+                      } catch (InterruptedException e) {
+                          e.printStackTrace();
+                      }
+                      test.change();
+                  }
+              }).start();
+  
+              new Thread(new Runnable() {
+                  @Override
+                  public void run() {
+                      try {
+                          Thread.sleep(1);
+                      } catch (InterruptedException e) {
+                          e.printStackTrace();
+                      }
+                      test.print();
+                  }
+              }).start();
+          }
+  
+      }
+  
+      private void print() {
+          System.out.println("b = " + b + ",a = " + a);
+      }
+  
+      private void change() {
+          a = 3;
+          b = a;
+      }
+  }
+  
+  /**
+  - A线程修改了本地内存并未同步到主内存
+  - 可以用volatile关键字解决
+  */
+  ```
+
+- 为什么会出现可见性
+
+  ![](线程可见性问题.png)
+
+  - cpu 有多级缓存，导致读的数据过期，更新数据未及时同步到主存
+
+- JMM 的主内存和本地内存
+
+  ![](jmm.png)
+
+- Happens-before原则
+
+- volatile关键字
+
+- 能保证可见性的措施
+
+- 对synchronized可见性的正确理解
 
 ## 原子性
 
