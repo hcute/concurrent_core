@@ -12,8 +12,8 @@ import java.util.concurrent.CountDownLatch;
  *       x = 0 y = 0 此种情况发生了重排序
  */
 public class OutOfOrderExecution {
-    private static int x=0,y=0;
-    private static int a=0,b=0;
+    private static volatile int x=0,y=0;
+    private static volatile int a=0,b=0;
 
     public static void main(String[] args) throws InterruptedException {
         int i = 0;

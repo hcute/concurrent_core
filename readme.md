@@ -2092,19 +2092,249 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
   ![](jmm.png)
 
-- Happens-before原则
+  - jmm将L1 和 L2 以及L3 都规定为本地内存，而RAM为共享内存
+  - jmm规定所有的变量都存储在主内存中，同时每个线程也有自己独立的工作内存，工作内存中的变量内容是主内存中的拷贝
+  - 线程不能直接读写主内存中的变量，而只能操作自己工作内存中的变量，然后再同步到主存中
+  - 主内存是多个线程共享的，但线程间不共享工作内存，如果线程之间需要通信，必须借助主内存中转
+
+- Happens-before 原则
+
+  - 什么是happens-before
+
+    - 用来解决可见性问题，动作A发生在动作B之前，B保证能看见A，就是happens-before原则
+    - 如果一个操作happens-before于另外一个操作，那么我们说第一个操作对于第二个操作是可见的
+
+  - 什么不是happens-before
+
+    - X和Y的执行结果并不能保证总被对方看到
+
+  - Happens-before 规则
+
+  - 原则
+
+    - 单线程原则
+      - 后面的语句执行一定可以前面数据的变化
+    - 锁操作（synchronized 和 Lock）
+      - 如果A线程解锁了，线程B加锁，那么B一定可以看到A解锁之前的操作
+    - volatile变量
+      - 如果变量被volatile修饰了，那么写之后，读到一定是写之后的数据
+    - 线程的启动
+      - 子线程启动之前的主线程操作对子线程一定是可见的
+    - 线程join
+      - join后面的语句能看到join线程内部的所有操作
+    - 传递性
+      - hb(a,b) hb(b,c) -> hb(a,c)
+    - 中断
+      - 一个线程被其他线程interrupt，那么检测中断或者抛出InterruptedException一定能看到
+    - 构造方法
+      - 构造方法的最后一行指令 happens-before于finalize()方法的第一行指令
+    - 工具类
+      - 线程安全的容器get一定能看到在此之前的put等存入动作
+      - CountDownLatch
+      - Semaphore
+      - Futrue
+      - 线程池
+      - CyclicBarrier
+
+  - 优质代码案例
+
+    ```java
+    package threadcoreknowledge.jmm;
+    
+    /**
+     * 演示可见性带来的问题
+     *  可能出现
+     *      a=3,b=2
+     *      a=3,b=3
+     *      a=1,b=2
+     *      b=3,a=1 出现了可见性问题
+     *
+     */
+    public class FieldVisibility {
+    
+        volatile int a = 1; // 添加volatile 就具备了可见性
+        volatile int b = 2; // 添加volatile 就具备了可见性
+    
+        public static void main(String[] args) {
+            while (true) {
+                FieldVisibility test = new FieldVisibility();
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Thread.sleep(1);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        test.change();
+                    }
+                }).start();
+    
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Thread.sleep(1);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        test.print();
+                    }
+                }).start();
+            }
+    
+        }
+    
+        private void print() {
+            System.out.println("b = " + b + ",a = " + a);
+        }
+    
+        private void change() {
+            a = 3;
+            b = a;
+        }
+    }
+    
+    ```
+
+    
 
 - volatile关键字
 
+  - volatile是什么
+
+    - 是一种同步机制，比synchronized和Lock更轻量，使用volatile不会发生上下文的切换等开销很大的行为
+    - 如果一个变了修饰为volatile，那么jvm就知道之歌变量可能会被并发修改
+    - 但是volatile做不到synchronized那样的原子保护，只能在有限的场景下才能发挥作用
+
+  - volatile使用场合
+
+    - 不适用 ：a++这种需要保证原子性
+
+    - 使用场合
+
+      - boolean flag 如果一个变量自始至终只被各个线程赋值，而没有其他操作，那么就可以用volatile来代替synchronized或者代替原子变量，因为**赋值操作自身就具有原子性**，而volatile又可以保证可见性，所以就足够保证线程安全
+
+      - 作为刷新之前变量的触发器
+
+        ```java
+        Map configOptions;
+        char[] configText;
+        volatile boolean initialized = false; // 刷新之前变量的触发器
+        
+        // ThreadA
+        configOptions = new HashMap();
+        configText = readConfigFile(fileName);
+        processConfigOptions(configText,configOptions);
+        initialized = true; // 一旦initialized 为ture 之前的代码一定可以被其他线程看到
+        
+        // ThreadB
+        while (!initialized)
+          sleep();
+        // use configOptions
+        ```
+
+        
+
+  - volatile作用：可见性、禁止重排序
+
+    - 可见性
+      - 读一个volatile修饰的变量之前，需要先使相应的本地缓存失效，这样就必须要到主内存读取最新值，写一个volatile属性会立即刷新到主内存
+    - 禁止重排序
+      - 解决单例双重锁乱序问题
+
+  - volatile和synchronized的关系
+    - volatile可以看作是轻量级的synchronized，如果一个共享变量自始至终只是被各个线程赋值，而没有其他操作，那么就可以用volatile 代替synchronized或者代替原子变量操作，因为赋值自身是有原子性的，加上volatile保证的可见性，所以就保证了线程的安全
+  - 用volatile 修正重排序问题
+  - volatile小结
+    - 使用场景，boolean flag 和 作为触发器
+    - volatile不具备 原子性和互斥性，因为它无锁，
+    - volatile 只能用于属性，不能用在代码块和方法上
+    - 只能保证可见性和禁止重排序，读一定是读主存，写一定马上回同步到主存
+    - 可以保证happens-before原则
+    - volatile修饰long和double后，会保证原子性，因为double和long赋值不能保证原子性
+
 - 能保证可见性的措施
+
+  - volatile
+  - synchronized
+  - Lock
+  - 并发集合
+  - Thread.join
+  - Thread.start等满足happens-before原则规定的
 
 - 对synchronized可见性的正确理解
 
+  - synchronized 不仅可以保证原子性，还可以保证可见性
+  - synchronized也有近朱者赤
+    - 可以看到synchronized里和synchronized之前的代码都可以保证可见性
+
 ## 原子性
+
+- 什么是原子性
+  - 一系列的操作要么都成功要么都失败
+- java中的原子操作有哪些
+  - 除long和double之外的基本类型的赋值操作
+  - 所有引用类型赋值操作
+  - java.concurrent.Atomic.*包中的所有操作
+- long和double的原子性
+  - 由于long和double是64bit的，就会进行每次32bit的写入、读取，实际的java虚拟机不会出现问题
+- 原子性 + 原子性 != 原子性
+  - 全同步的HashMap也不完全安全
 
 
 
 ## 常见面试问题
+
+- JMM应用实例
+
+  - 单例的8种写法、单例和并发的关系
+
+    - 单例模式的作用
+
+      - 节省内存和计算、保证结果正确、方便管理
+
+    - 使用场景
+
+      - 无状态的工具类
+        - 比如日志工具类
+      - 全局信息类
+        - 网站的全局访问次数
+
+    - 8种写法
+
+      - 饿汉式（静态常量）【可用】
+
+      - 饿汉式（静态代码块）【可用】
+
+      - 懒汉式（线程不安全）【不可用】
+
+      - 懒汉式（线程安全）【不推荐】
+
+      - 懒汉式（线程不安全，同步代码块）【不可用】
+
+      - 双重检查【推荐在面试的时候用】
+
+        - 延迟加载效率高，线程安全
+        - 为什么double-check
+          - 可以保证线程安全
+          - 单check 行不行
+            - 不行，因为有线程安全问题
+          - 如果把锁加在方法上
+            - 可以，但是会造成性能问题
+        - 为什么要volatile修饰属性
+          - 新建对象实际是3个步骤
+            - 创建一个empty 对象【属性未赋值】
+            - 调用构造函数赋值
+            - 把创建的对象赋值给引用
+          - 如果上述步骤被重排
+            - 创建一个empty 对象【属性未赋值】
+            - 把创建的对象赋值给引用
+            - 调用构造函数赋值
+
+      - 
+
+        
 
 
 

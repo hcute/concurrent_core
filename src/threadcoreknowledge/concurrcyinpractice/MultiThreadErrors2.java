@@ -20,7 +20,6 @@ public class MultiThreadErrors2 implements Runnable{
         t1.start();
         t2.start();
 
-
     }
     @Override
     public void run() {

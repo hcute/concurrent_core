@@ -29,7 +29,6 @@ public class MultiThreadsError implements Runnable{
         System.out.println("真正运行的次数" + realIndex);
         System.out.println("发生错误的次数" + wrongCount);
 
-
     }
 
     @Override
@@ -63,7 +62,6 @@ public class MultiThreadsError implements Runnable{
                 }
                 marked[index] =true;
             }
-
         }
     }
 }

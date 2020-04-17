@@ -9,14 +9,16 @@ package threadcoreknowledge.jmm;
  *      b=3,a=1 出现了可见性问题
  *
  */
-public class FieldVisibility {
+public class FieldVisibilitySynchronized {
 
-    volatile int a = 1; // 添加volatile 就具备了可见性
-    volatile int b = 2; // 添加volatile 就具备了可见性
+    int a = 1;
+    int b = 2;
+    int c = 3;
+    int d = 4;
 
     public static void main(String[] args) {
         while (true) {
-            FieldVisibility test = new FieldVisibility();
+            FieldVisibilitySynchronized test = new FieldVisibilitySynchronized();
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -45,11 +47,22 @@ public class FieldVisibility {
     }
 
     private void print() {
-        System.out.println("b = " + b + ",a = " + a);
+        synchronized (this) {
+            int aa = a;
+        }
+        int bb = b;
+        int cc = c;
+        int dd = d;
+        System.out.println("bb = " + bb + ",cc = " + cc);
     }
 
     private void change() {
         a = 3;
-        b = a;
+        b = 4;
+        c = 4;
+        d = 5;
+        synchronized (this) {
+            d = 6;
+        }
     }
 }
