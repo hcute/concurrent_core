@@ -1857,5 +1857,69 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 
 
+# Java内存模型 --底层原理
+
+## 什么叫底层原理
+
+- java 代码到 CPU 指令
+  - source.java -> java [source.class] -> 运行java [jvm 会把字节码转化为机器指令，不同的操作系统会翻译成不同机器指令，可能导致并发问题，所以出现了jmm]
+- 重点向下钻研
+  - 最终出现了java内存模型的规范
+
+## JVM内存结构、Java内存模型、Java对象模型
+
+- jvm内存结构
+
+  - 和虚拟机运行时的区域有关
+
+  - jvm虚拟机机构
+
+    <img src="Java虚拟机结构.png" style="zoom:50%;" />
+
+- java内存模型
+
+  - 和java并发编程有关
+
+- java对象模型
+
+  - java对象在虚拟机中的表现形式有关
+  
+  - 结构图
+  
+    <img src="java对象模型.png" style="zoom:75%;" />
+
+
+
+## JMM是什么
+
+- 是什么
+  - java memory model
+  - c语言不存在内存模型，导致在不同的环境下产生不同的结果，从而出现了一个标准（jmm），让多线程运行可期
+  - 是一组规范，需要jvm遵守，让开发者，更方便的开发多线程程序
+  - 是工具类和关键字的原理
+    - volatile、synchronized、lock等原理都是jmm
+  - 最重要的三个内容
+    - 重排序
+    - 可见性
+    - 原子性
+
+## 重排序
+
+
+
+## 可见性
+
+
+
+## 原子性
+
+
+
+## 常见面试问题
+
+
+
+
+
 
 
