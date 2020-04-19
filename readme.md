@@ -2092,7 +2092,7 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
   ![](jmm.png)
 
-  - jmm将L1 和 L2 以及L3 都规定为本地内存，而RAM为共享内存
+  - jmm将L1 和 L2 以及L3 都规定为本地内存，而RAM为主内存
   - jmm规定所有的变量都存储在主内存中，同时每个线程也有自己独立的工作内存，工作内存中的变量内容是主内存中的拷贝
   - 线程不能直接读写主内存中的变量，而只能操作自己工作内存中的变量，然后再同步到主存中
   - 主内存是多个线程共享的，但线程间不共享工作内存，如果线程之间需要通信，必须借助主内存中转
@@ -2244,6 +2244,7 @@ public class BlockedWaitingTimedWaiting implements Runnable{
       - 解决单例双重锁乱序问题
 
   - volatile和synchronized的关系
+    
     - volatile可以看作是轻量级的synchronized，如果一个共享变量自始至终只是被各个线程赋值，而没有其他操作，那么就可以用volatile 代替synchronized或者代替原子变量操作，因为赋值自身是有原子性的，加上volatile保证的可见性，所以就保证了线程的安全
   - 用volatile 修正重排序问题
   - volatile小结
@@ -2304,23 +2305,17 @@ public class BlockedWaitingTimedWaiting implements Runnable{
     - 8种写法
 
       - 饿汉式（静态常量）【可用】
-
-      - 饿汉式（静态代码块）【可用】
-
+- 饿汉式（静态代码块）【可用】
       - 懒汉式（线程不安全）【不可用】
-
-      - 懒汉式（线程安全）【不推荐】
-
+- 懒汉式（线程安全）【不推荐】
       - 懒汉式（线程不安全，同步代码块）【不可用】
-
-      - 双重检查【推荐在面试的时候用】
-
+- **双重检查**【推荐在面试的时候用】
         - 延迟加载效率高，线程安全
-        - 为什么double-check
+  - 为什么double-check
           - 可以保证线程安全
-          - 单check 行不行
+    - 单check 行不行
             - 不行，因为有线程安全问题
-          - 如果把锁加在方法上
+    - 如果把锁加在方法上
             - 可以，但是会造成性能问题
         - 为什么要volatile修饰属性
           - 新建对象实际是3个步骤
@@ -2331,10 +2326,288 @@ public class BlockedWaitingTimedWaiting implements Runnable{
             - 创建一个empty 对象【属性未赋值】
             - 把创建的对象赋值给引用
             - 调用构造函数赋值
+          - 使用了volatile修饰了就禁止了重排序
+      - 静态内部类【推荐使用】
+      - **枚举**【推荐使用】
+        - 优点：
+          - 写法简单
+          - 线程安全
+    - 防止反序列化破坏单例
+    - 饿汉式缺点
+  - 浪费资源
+    - 懒汉式缺点
+      - 写法比较复杂，写不好就会线程不安全
+    - 懒汉式的double-check，不用就不安全
+      - 不用线程不安全，而且实例属性需要加上volatile修饰，防止对象初始化（三步）时的重排序和可见性问题
+  - 最好的实现方式时枚举
+  - 讲一讲什么事Java内存模型
+    - 起源
+    - jvm 和java 内存模型和java对象模型
+    - jmm中的原子性，可见性，重排序
+    - 讲volatile
+    - 讲原子性
+    - volatile 和synchronized的不同
+      - 轻量级的volatile
+      - volatile 不能保证原子操作
+  - 什么是原子操作？java中的原子操作？生成对象的过程是不是原子操作
+  - 什么是内存可见性？
+  - 64bit的double和long写入的时候是原子的吗？
+    - java没有规定是原子的，但是商用的jvm都进行了原子性保证，我们通常不用考虑
 
-      - 
+# 死锁的产生和消除
 
-        
+## 死锁是什么，有什么危害
+
+- 什么是死锁
+
+  - 发生在并发过程中，两个或更多的线程互不相让，导致无限的等待
+
+- 死锁的影响
+
+  - 不同的系统不同
+    - 比如数据库有检测并放弃事务的机制
+    - jvm 不具备自动处理，但是可以进行检测
+
+- 几率不高但危害很大
+
+  - 导致系统崩溃
+  - 压力测试无法找出所有潜在的死锁
+
+- 发生死锁的例子
+
+  - 简单的情况
+
+    ```java
+    package deadlock;
+    
+    /**
+     * 必定发生死锁的情况
+     */
+    
+    public class MustDeadLock implements Runnable{
+        int flag = 1;
+    
+        static Object o1 = new Object();
+        static Object o2 = new Object();
+    
+        public static void main(String[] args) {
+            MustDeadLock r1 = new MustDeadLock();
+            MustDeadLock r2 = new MustDeadLock();
+            r1.flag = 1;
+            r2.flag = 0;
+            Thread t1 = new Thread(r1);
+            Thread t2 = new Thread(r2);
+            t1.start();
+            t2.start();
+    
+        }
+    
+        @Override
+        public void run() {
+            System.out.println("flag = " + flag);
+    
+            if (flag == 1) {
+                synchronized (o1) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    synchronized (o2){
+                        System.out.println(Thread.currentThread().getName() + "成功拿到两把锁");
+                    }
+                }
+    
+            }
+            if (flag == 0) {
+                synchronized (o2){
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    synchronized (o1) {
+                        System.out.println(Thread.currentThread().getName()+ "成功拿到两把锁");
+                    }
+                }
+    
+            }
+        }
+    }
+    
+    
+    /**
+    flag = 1
+    flga = 0
+    Process finished with exit code 130 (interrupted by signal 2: SIGINT) 退出信号不是0 而是130表示不是正常退出，正常退出的信号是0
+    */
+    ```
+
+    
+
+  - 实际中转账发生死锁的情况
+
+    - 需要两把锁，转出者，锁住账户，转入者，锁住账户
+
+    - 获取两把锁，转出者余额大于0，扣除转出账户，增加转入账户余额，这一步需要原子操作
+
+    - 如果在此期间正好转出者也给转入者转账
+
+      ```java
+      package deadlock;
+      
+      import sun.security.krb5.internal.TGSRep;
+      
+      /**
+       * 转账是发生死锁，一旦打开注释，就会发生死锁
+       */
+      public class TransferMoney implements Runnable{
+      
+          int flag = 1;
+          static Account a = new Account(500);
+          static Account b = new Account(500);
+      
+      
+          public static void main(String[] args) throws InterruptedException {
+              TransferMoney r1 = new TransferMoney();;
+              r1.flag = 1;
+              TransferMoney r2 = new TransferMoney();
+              r2.flag = 0;
+              Thread t1 = new Thread(r1);
+              Thread t2 = new Thread(r2);
+      
+              t1.start();
+              t2.start();
+              t1.join();
+              t2.join();
+      
+              System.out.println("a的余额" + a.balance + ",b的余额" + b.balance);
+      
+          }
+      
+      
+          @Override
+          public void run() {
+              if (flag == 1) {
+                  // 从A转给B
+                  transferMoney(a,b,200);
+              }
+              if (flag == 0) {
+                  transferMoney(b,a,200);
+              }
+      
+          }
+      
+          public void transferMoney(Account from, Account to, int money) {
+      
+              synchronized (from) {
+                  // 获取锁需要等待500 打开注释会产生死锁
+      //            try {
+      //                Thread.sleep(500);
+      //            } catch (InterruptedException e) {
+      //                e.printStackTrace();
+      //            }
+                  synchronized (to) {
+                      if (from.balance < 0) {
+                          System.out.println("余额不足，转账失败");
+                      }
+                      from.balance -= money;
+                      to.balance += money;
+                      System.out.println("成功转账了" + money + "元");
+                  }
+              }
+          }
+      
+          static class Account{
+              int balance;
+      
+              public Account(int balance) {
+                  this.balance = balance;
+              }
+          }
+      }
+      
+      ```
+
+      
+
+  - 模拟多人随机转账
+
+    ```java
+    package deadlock;
+    
+    import java.util.Random;
+    
+    /**
+     * 模拟多人随机转账
+     */
+    public class MultiTransferMoney {
+    
+        private static final int NUM_ACCOUNTS = 5000;
+        private static final int NUM_MONEY = 500;
+        private static final int NUM_ITERATIONS = 100000;
+        private static final int NUM_THREADS = 500;
+    
+        public static void main(String[] args) {
+            Random random = new Random();
+            TransferMoney.Account[] accounts = new TransferMoney.Account[NUM_ACCOUNTS];
+            for (int i = 0; i < NUM_ACCOUNTS; i++) {
+                accounts[i] = new TransferMoney.Account(NUM_MONEY);
+            }
+    
+            class TransferThread extends Thread{
+                @Override
+                public void run() {
+                    for (int i = 0; i < NUM_ITERATIONS; i++) {
+                        int fromAcc = random.nextInt(NUM_ACCOUNTS);
+                        int toAcc = random.nextInt(NUM_ACCOUNTS);
+                        int amount = random.nextInt(NUM_MONEY);
+                        TransferMoney.transferMoney(accounts[fromAcc],accounts[toAcc],amount);
+                    }
+                    System.out.println("转账结束");
+                }
+            }
+    
+            for (int i = 0; i < NUM_THREADS; i++) {
+                new TransferThread().start();
+            }
+    
+        }
+    }
+    
+    ```
+
+    
+
+## 死锁的四个必要条件
+
+
+
+## 如何定位死锁
+
+
+
+## 修复死锁的策略
+
+
+
+## 实际工程中如何避免死锁
+
+
+
+## 其他活性故障
+
+
+
+## 面试问题
+
+- 写一个必然死锁的例子
+- 发生死锁的必要条件
+- 如何定位死锁
+- 有哪些解决死锁问题的策略
+- 讲讲经典的哲学家就餐问题
+- 实际工程中如何避免死锁
+- 活跃性问题，活锁和饥饿性问题
 
 
 
