@@ -2581,23 +2581,280 @@ public class BlockedWaitingTimedWaiting implements Runnable{
 
 ## 死锁的四个必要条件
 
-
+- 互斥条件
+- 请求与保持条件
+- 不剥夺条件
+- 循环等待条件
 
 ## 如何定位死锁
 
+- jstack找出死锁
 
+  - jps 查询运行的java程序的pid
+
+  - 使用 jstack pid 查看死锁
+
+    ![](jstack查看死锁.png)
+
+
+
+- 使用ThreadMXBean代码演示
+
+  ```java
+  ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+  long[] deadlockedThreads = threadMXBean.findDeadlockedThreads();
+  if (deadlockedThreads != null && deadlockedThreads.length >0) {
+    for (int i = 0; i < deadlockedThreads.length; i++) {
+      ThreadInfo threadInfo = threadMXBean.getThreadInfo(deadlockedThreads[i]);
+      System.out.println("发现死锁了" + threadInfo.getThreadName());
+    }
+  }
+  ```
+
+  
 
 ## 修复死锁的策略
+
+- 线上处理方式
+  - 线上尽量避免问题，如果发生问题，保存案发现场，停止服务
+  - 排查死锁，修改代码重新上线
+
+- 修复策略
+
+  - 避免策略
+
+    - 哲学家就餐的换手方案，转账换序方案
+
+      - 避免策略，避免相反的获取锁的顺序，实际上就是不在乎锁的顺序
+
+      - 哲学家就餐问题
+
+        - 问题描述
+
+          - 先拿起左手边的筷子
+          - 然后拿起右手边的筷子
+          - 如果筷子被人使用了，就等别人使用完
+          - 吃完后，把筷子放回原位
+
+        - 代码演示
+
+          ```java
+          package deadlock;
+          
+          /**
+           * 演示哲学家就餐问题导致的死锁
+           */
+          public class DiningPhilosophers {
+          
+              // 哲学家
+          
+              public static class Philosopher implements Runnable {
+                  private Object leftChopstick;
+                  private Object rightChopstick;
+          
+                  public Philosopher(Object leftChopstick, Object rightChopstick) {
+                      this.leftChopstick = leftChopstick;
+                      this.rightChopstick = rightChopstick;
+                  }
+          
+                  @Override
+                  public void run() {
+                      try {
+                          while (true) {
+                              // 哲学家只做两件事，思考和吃饭
+                              doAction("Thinking");
+                              synchronized (leftChopstick) {
+                                  doAction("Picked up left chopstick");
+                                  synchronized (rightChopstick) {
+                                      doAction("Picked up right chopstick - eating");
+          
+                                      doAction("Put down right chopstick");
+                                  }
+                                  doAction("Put down left chopstick");
+                              }
+                          }
+                      } catch (InterruptedException e) {
+                          e.printStackTrace();
+                      }
+                  }
+          
+                  private void doAction(String action) throws InterruptedException {
+                      System.out.println(Thread.currentThread().getName() + " " + action);
+                      Thread.sleep((long) (Math.random() * 10));
+                  }
+              }
+          
+              public static void main(String[] args) {
+                  Philosopher[]  philosophers = new Philosopher[5];
+                  Object[] chopsticks = new Object[philosophers.length];
+                  for (int i = 0; i < chopsticks.length; i++) {
+                      chopsticks[i] = new Object();
+                  }
+                  for (int i = 0; i < philosophers.length; i++) {
+                      Object leftChopstick = chopsticks[i];
+                      Object rightChopstick = chopsticks[(i+1)%chopsticks.length];// 考虑越界
+                      philosophers[i] = new Philosopher(leftChopstick,rightChopstick);
+                      new Thread(philosophers[i],"哲学家" + (i+1)).start();
+                  }
+              }
+          }
+          
+          ```
+
+          
+
+        - 多种解决方案
+
+          - 服务员检查（避免策略）
+          - 改变哲学家拿叉子的顺序，不都先拿左边的叉子（避免策略）
+          - 餐票（避免策略），5个人给4个餐票
+          - 领导调节（检查与恢复策略）
+
+        - 代码演示解决死锁
+
+          ```java
+          package deadlock;
+          
+          /**
+           * 演示哲学家就餐问题导致的死锁
+           */
+          public class DiningPhilosophers {
+          
+              // 哲学家
+          
+              public static class Philosopher implements Runnable {
+                  private Object leftChopstick;
+                  private Object rightChopstick;
+          
+                  public Philosopher(Object leftChopstick, Object rightChopstick) {
+                      this.leftChopstick = leftChopstick;
+                      this.rightChopstick = rightChopstick;
+                  }
+          
+                  @Override
+                  public void run() {
+                      try {
+                          while (true) {
+                              // 哲学家只做两件事，思考和吃饭
+                              doAction("Thinking");
+                              synchronized (leftChopstick) {
+                                  doAction("Picked up left chopstick");
+                                  synchronized (rightChopstick) {
+                                      doAction("Picked up right chopstick - eating");
+          
+                                      doAction("Put down right chopstick");
+                                  }
+                                  doAction("Put down left chopstick");
+                              }
+                          }
+                      } catch (InterruptedException e) {
+                          e.printStackTrace();
+                      }
+                  }
+          
+                  private void doAction(String action) throws InterruptedException {
+                      System.out.println(Thread.currentThread().getName() + " " + action);
+                      Thread.sleep((long) (Math.random() * 10));
+                  }
+              }
+          
+              public static void main(String[] args) {
+                  Philosopher[]  philosophers = new Philosopher[5];
+                  Object[] chopsticks = new Object[philosophers.length];
+                  for (int i = 0; i < chopsticks.length; i++) {
+                      chopsticks[i] = new Object();
+                  }
+                  for (int i = 0; i < philosophers.length; i++) {
+                      Object leftChopstick = chopsticks[i];
+                      Object rightChopstick = chopsticks[(i+1)%chopsticks.length];// 考虑越界
+          
+                      // 解决死锁 ,最后一个哲学家改变拿筷子的顺序
+                      if (i == philosophers.length - 1) {
+                          philosophers[i] = new Philosopher(rightChopstick,leftChopstick);
+                      }
+                      else {
+                          philosophers[i] = new Philosopher(leftChopstick,rightChopstick);
+                      }
+                      new Thread(philosophers[i],"哲学家" + (i+1)).start();
+                  }
+              }
+          }
+          
+          ```
+
+          
+
+  - 检测与恢复策略
+
+    - 不是完全不发生死锁，如果发生了死锁，就剥夺资源
+    - 准许发生死锁
+    - 每次记录死锁的记录，有向图
+    - 定期检查“锁调用的记录，是否有回路”
+    - 恢复：
+      - 逐个终止线程，直到死锁消除
+        - 终止顺序
+          - 优先级，按照业务系统的重要性
+          - 已占用资源，还需要的资源
+          - 已运行时间
+      - 资源抢占
+        - 把已分发的锁给收回来
+        - 让线程回退几步，不用结束整个线程
+        - 缺点：可能导致线程一直被抢占，造成线程饥饿
+
+  - 鸵鸟策略 - 尽量不要用
+
+    - 因为鸵鸟遇到危险的时候，通常就会把头埋在地上，这样就看不到危险了，而鸵鸟政策的意思就是，如果发生死锁的概率极低，那么我们就直接忽略它，知道死锁发生的时候，再去人工修复它。
 
 
 
 ## 实际工程中如何避免死锁
 
+- Lock的tryLock(long timeout,TimeUnit unit)，synchronized 不具备尝试锁的能力
+  - 造成超时的原因不一定是死锁，比如线程执行比较慢
+  - 演示代码，退一步海阔天空
+- 多使用并发类而不是自己设计锁
+  - 可以降低发生死锁的概率
+  - 常用并发类
+    - ConcurrentHashMap
+    - ConcurrentLinkedQueue
+    - AtomicBoolean等
+- 尽量降低锁的使用粒度，用不同锁而是用不同的锁
+- 如果能使用同步代码块，就不使用同步方法
+- 给线程取有意义的名字，方便死锁查询，框架和jdk都遵循这个规范
+- 避免锁的嵌套，特别容易造成死锁
+- 分配资源前，先看看能不能回收：银行家算法
+- 尽量不要几个功能使用同一把锁，专锁专用
+
+
+
 
 
 ## 其他活性故障
 
+### 活锁 
 
+- 什么是活锁
+  - 线程没有阻塞，但是程序得不到进展，此时一直消耗CPU资源
+- 代码演示
+  - 牛郎织女没饭吃
+- 活锁在生产中的实例：消息队列
+  - 消息如果失败，则会重试，如果一直重试放在消息队列头部
+    - 重试的时候放到队列的最末尾
+    - 重试次数限制，如果还是不成功，则写入数据库
+- 如何解决活锁
+  - 以太网的指数退避算法，引入随机条件
+    - 重试的时间的算法，随机取0-1024 之间随机取
+
+### 饥饿
+
+- 线程需要获得CPU资源，但是一直获取不到
+- 和线程优先级有关
+  - 默认线程优先级为5 【0-10】
+  - 默认继承父线程的优先级
+  - 但是不建议按照优先级来设计多线程
+- 避免
+  - 用完释放锁
+  - 不要再线程上设置优先级
 
 ## 面试问题
 

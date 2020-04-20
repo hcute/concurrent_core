@@ -1,24 +1,37 @@
 package deadlock;
 
-/**
- * 必定发生死锁的情况
- */
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 
-public class MustDeadLock implements Runnable{
+/**
+ * 使用ThreadMXBean 检查死锁
+ */
+public class ThreadMXBeanDetection implements Runnable{
+
     int flag = 1;
 
     static Object o1 = new Object();
     static Object o2 = new Object();
 
-    public static void main(String[] args) {
-        MustDeadLock r1 = new MustDeadLock();
-        MustDeadLock r2 = new MustDeadLock();
+    public static void main(String[] args) throws InterruptedException {
+        ThreadMXBeanDetection r1 = new ThreadMXBeanDetection();
+        ThreadMXBeanDetection r2 = new ThreadMXBeanDetection();
         r1.flag = 1;
         r2.flag = 0;
         Thread t1 = new Thread(r1);
         Thread t2 = new Thread(r2);
         t1.start();
         t2.start();
+        Thread.sleep(1000);
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        long[] deadlockedThreads = threadMXBean.findDeadlockedThreads();
+        if (deadlockedThreads != null && deadlockedThreads.length >0) {
+            for (int i = 0; i < deadlockedThreads.length; i++) {
+                ThreadInfo threadInfo = threadMXBean.getThreadInfo(deadlockedThreads[i]);
+                System.out.println("发现死锁了" + threadInfo.getThreadName());
+            }
+        }
 
     }
 
@@ -53,5 +66,4 @@ public class MustDeadLock implements Runnable{
 
         }
     }
-
 }

@@ -10,6 +10,7 @@ public class TransferMoney implements Runnable{
     int flag = 1;
     static Account a = new Account(500);
     static Account b = new Account(500);
+    static Object lock = new Object();
 
 
     public static void main(String[] args) throws InterruptedException {
@@ -43,8 +44,47 @@ public class TransferMoney implements Runnable{
     }
 
     public static void transferMoney(Account from, Account to, int money) {
+        // 锁顺序一致修复代码 ，如果hash 值一样需要加时赛
+        class Helper {
+            private void transfer(){
+                if (from.balance < 0) {
+                    System.out.println("余额不足，转账失败");
+                }
+                from.balance -= money;
+                to.balance += money;
+                System.out.println("成功转账了" + money + "元");
+            }
+        }
+        int fromHash = System.identityHashCode(from);
+        int toHash = System.identityHashCode(to);
+        if (fromHash < toHash) {
+            synchronized (from){
+                synchronized (to) {
+                    new Helper().transfer();
+                }
+            }
+        }
+        else if (fromHash > toHash) {
+            synchronized (to){
+                synchronized (from) {
+                    new Helper().transfer();
+                }
+            }
+        }
+        // hash 冲突的时候 ，如果数据库有主键 ，按照主键的高低来决定获取锁的顺序
+        else {
+            synchronized (lock) {
+                synchronized (from){
+                    synchronized (to) {
+                        new Helper().transfer();
+                    }
+                }
+            }
+        }
+        // hashcode一样
 
-        synchronized (from) {
+        // 原始代码
+        /*synchronized (from) {
             // 获取锁需要等待500
 //            try {
 //                Thread.sleep(500);
@@ -59,7 +99,7 @@ public class TransferMoney implements Runnable{
                 to.balance += money;
                 System.out.println("成功转账了" + money + "元");
             }
-        }
+        }*/
     }
 
     static class Account{
